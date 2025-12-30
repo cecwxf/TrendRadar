@@ -51,3 +51,7 @@ TEST_*.md
 # Temporary files
 *.tmp
 .cache/
+
+# Environment files (contains sensitive data)
+.env
+docker/.env
