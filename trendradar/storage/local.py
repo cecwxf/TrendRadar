@@ -290,6 +290,193 @@ class LocalStorageBackend(StorageBackend):
             print(f"[本地存储] 保存失败: {e}")
             return False
 
+    def save_crypto_prices(self, crypto_data: Dict, crawl_time: str, crawl_date: str) -> bool:
+        """
+        保存加密货币价格数据
+
+        Args:
+            crypto_data: 加密货币数据字典 {symbol: {price, change_24h, volume_24h}}
+            crawl_time: 抓取时间
+            crawl_date: 抓取日期
+
+        Returns:
+            是否保存成功
+        """
+        try:
+            conn = self._get_connection(crawl_date)
+            cursor = conn.cursor()
+
+            saved_count = 0
+            for symbol, data in crypto_data.items():
+                if data is None:
+                    continue
+
+                cursor.execute("""
+                    INSERT INTO crypto_prices
+                    (symbol, price_usd, price_change_24h, volume_24h, crawl_time, crawl_date)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                """, (
+                    symbol,
+                    data.get('price', 0.0),
+                    data.get('change_24h', 0.0),
+                    data.get('volume_24h', 0.0),
+                    crawl_time,
+                    crawl_date
+                ))
+                saved_count += 1
+
+            conn.commit()
+            if saved_count > 0:
+                print(f"[本地存储] 加密货币数据已保存: {saved_count} 条")
+            return True
+
+        except Exception as e:
+            print(f"[本地存储] 保存加密货币数据失败: {e}")
+            return False
+
+    def save_stock_prices(self, stock_data: Dict, crawl_time: str, crawl_date: str) -> bool:
+        """
+        保存股票价格数据
+
+        Args:
+            stock_data: 股票数据字典 {symbol: {market, price, change_pct, volume}}
+            crawl_time: 抓取时间
+            crawl_date: 抓取日期
+
+        Returns:
+            是否保存成功
+        """
+        try:
+            conn = self._get_connection(crawl_date)
+            cursor = conn.cursor()
+
+            saved_count = 0
+            for symbol, data in stock_data.items():
+                if data is None:
+                    continue
+
+                cursor.execute("""
+                    INSERT INTO stock_prices
+                    (symbol, market, price, change_pct, volume, crawl_time, crawl_date)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    symbol,
+                    data.get('market', ''),
+                    data.get('price', 0.0),
+                    data.get('change_pct', 0.0),
+                    data.get('volume', 0.0),
+                    crawl_time,
+                    crawl_date
+                ))
+                saved_count += 1
+
+            conn.commit()
+            if saved_count > 0:
+                print(f"[本地存储] 股票数据已保存: {saved_count} 条")
+            return True
+
+        except Exception as e:
+            print(f"[本地存储] 保存股票数据失败: {e}")
+            return False
+
+    def save_twitter_posts(self, tweets: List[Dict], author: str, crawl_time: str, crawl_date: str) -> bool:
+        """
+        保存 Twitter 推文数据
+
+        Args:
+            tweets: 推文列表 [{content, post_url, published_time}]
+            author: 作者用户名
+            crawl_time: 抓取时间
+            crawl_date: 抓取日期
+
+        Returns:
+            是否保存成功
+        """
+        try:
+            conn = self._get_connection(crawl_date)
+            cursor = conn.cursor()
+
+            saved_count = 0
+            for tweet in tweets:
+                try:
+                    cursor.execute("""
+                        INSERT OR IGNORE INTO twitter_posts
+                        (author, content, post_url, published_time, crawl_time, crawl_date)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    """, (
+                        author,
+                        tweet.get('content', ''),
+                        tweet.get('post_url', ''),
+                        tweet.get('published_time', ''),
+                        crawl_time,
+                        crawl_date
+                    ))
+                    if cursor.rowcount > 0:
+                        saved_count += 1
+                except sqlite3.IntegrityError:
+                    # 重复的推文，跳过
+                    pass
+
+            conn.commit()
+            if saved_count > 0:
+                print(f"[本地存储] Twitter 数据已保存: {saved_count} 条")
+            return True
+
+        except Exception as e:
+            print(f"[本地存储] 保存 Twitter 数据失败: {e}")
+            return False
+
+    def save_ai_analysis(
+        self,
+        analysis_content: str,
+        analysis_type: str,
+        model: str,
+        tokens_used: int,
+        crawl_time: str,
+        crawl_date: str,
+        data_snapshot: Optional[str] = None
+    ) -> bool:
+        """
+        保存 AI 分析结果
+
+        Args:
+            analysis_content: 分析内容
+            analysis_type: 分析类型 (comprehensive, news, crypto, stock)
+            model: AI 模型名称
+            tokens_used: 使用的 tokens 数量
+            crawl_time: 分析时间
+            crawl_date: 分析日期
+            data_snapshot: 数据快照（JSON 格式，可选）
+
+        Returns:
+            是否保存成功
+        """
+        try:
+            conn = self._get_connection(crawl_date)
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                INSERT INTO ai_analysis
+                (analysis_type, content, data_snapshot, model, tokens_used, crawl_time, crawl_date)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (
+                analysis_type,
+                analysis_content,
+                data_snapshot,
+                model,
+                tokens_used,
+                crawl_time,
+                crawl_date
+            ))
+
+            conn.commit()
+            print(f"[本地存储] AI 分析已保存: {analysis_type} ({tokens_used} tokens)")
+            return True
+
+        except Exception as e:
+            print(f"[本地存储] 保存 AI 分析失败: {e}")
+            return False
+
     def get_today_all_data(self, date: Optional[str] = None) -> Optional[NewsData]:
         """
         获取指定日期的所有新闻数据（合并后）

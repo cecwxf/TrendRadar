@@ -115,3 +115,99 @@ CREATE INDEX IF NOT EXISTS idx_crawl_status_record ON crawl_source_status(crawl_
 
 -- 排名历史索引
 CREATE INDEX IF NOT EXISTS idx_rank_history_news ON rank_history(news_item_id);
+
+-- ============================================
+-- 扩展数据源表（加密货币、股票、Twitter、AI 分析）
+-- ============================================
+
+-- ============================================
+-- 加密货币价格表
+-- 存储 BTC/ETH 等加密货币的实时价格数据
+-- ============================================
+CREATE TABLE IF NOT EXISTS crypto_prices (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    symbol TEXT NOT NULL,              -- 交易对符号 (如 BTCUSDT, ETHUSDT)
+    price_usd REAL NOT NULL,           -- 美元价格
+    price_change_24h REAL,             -- 24小时涨跌幅（百分比）
+    volume_24h REAL,                   -- 24小时交易量
+    high_24h REAL,                     -- 24小时最高价
+    low_24h REAL,                      -- 24小时最低价
+    market_cap REAL,                   -- 市值（可选）
+    crawl_time TEXT NOT NULL,          -- 抓取时间 (HH:MM)
+    crawl_date TEXT NOT NULL,          -- 抓取日期 (YYYY-MM-DD)
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(symbol, crawl_time, crawl_date)
+);
+
+-- ============================================
+-- 股票价格表
+-- 存储美股/港股/A股的实时价格数据
+-- ============================================
+CREATE TABLE IF NOT EXISTS stock_prices (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    symbol TEXT NOT NULL,              -- 股票代码 (如 AAPL, 0700.HK, 600519.SS)
+    market TEXT NOT NULL,              -- 市场 (US, HK, CN)
+    price REAL NOT NULL,               -- 当前价格
+    change_pct REAL,                   -- 涨跌幅百分比
+    volume REAL,                       -- 成交量
+    open_price REAL,                   -- 开盘价
+    high_price REAL,                   -- 最高价
+    low_price REAL,                    -- 最低价
+    crawl_time TEXT NOT NULL,          -- 抓取时间
+    crawl_date TEXT NOT NULL,          -- 抓取日期
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(symbol, market, crawl_time, crawl_date)
+);
+
+-- ============================================
+-- Twitter 推文表
+-- 存储特定用户的 Twitter 推文
+-- ============================================
+CREATE TABLE IF NOT EXISTS twitter_posts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    author TEXT NOT NULL,              -- 作者用户名 (如 SiliconWang)
+    content TEXT NOT NULL,             -- 推文内容
+    post_url TEXT NOT NULL,            -- 推文链接
+    published_time TEXT,               -- 发布时间
+    crawl_time TEXT NOT NULL,          -- 抓取时间
+    crawl_date TEXT NOT NULL,          -- 抓取日期
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(post_url)
+);
+
+-- ============================================
+-- AI 分析结果表
+-- 存储 Claude/ChatGPT 的综合分析结果
+-- ============================================
+CREATE TABLE IF NOT EXISTS ai_analysis (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    analysis_type TEXT NOT NULL,       -- 分析类型 (news, crypto, stock, comprehensive)
+    content TEXT NOT NULL,             -- 分析内容
+    data_snapshot TEXT,                -- 数据快照 (JSON 格式，可选)
+    model TEXT DEFAULT 'claude-3-5-sonnet',  -- AI 模型
+    tokens_used INTEGER,               -- Token 使用量
+    crawl_time TEXT NOT NULL,          -- 分析时间
+    crawl_date TEXT NOT NULL,          -- 分析日期
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ============================================
+-- 扩展数据源索引
+-- ============================================
+
+-- 加密货币索引
+CREATE INDEX IF NOT EXISTS idx_crypto_symbol_time ON crypto_prices(symbol, crawl_date, crawl_time);
+CREATE INDEX IF NOT EXISTS idx_crypto_date ON crypto_prices(crawl_date);
+
+-- 股票索引
+CREATE INDEX IF NOT EXISTS idx_stock_symbol_time ON stock_prices(symbol, crawl_date, crawl_time);
+CREATE INDEX IF NOT EXISTS idx_stock_market ON stock_prices(market);
+CREATE INDEX IF NOT EXISTS idx_stock_date ON stock_prices(crawl_date);
+
+-- Twitter 索引
+CREATE INDEX IF NOT EXISTS idx_twitter_author_time ON twitter_posts(author, crawl_date, crawl_time);
+CREATE INDEX IF NOT EXISTS idx_twitter_date ON twitter_posts(crawl_date);
+
+-- AI 分析索引
+CREATE INDEX IF NOT EXISTS idx_ai_analysis_time ON ai_analysis(crawl_date, crawl_time);
+CREATE INDEX IF NOT EXISTS idx_ai_analysis_type ON ai_analysis(analysis_type);

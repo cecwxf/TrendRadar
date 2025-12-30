@@ -323,6 +323,17 @@ class NewsAnalyzer:
         # HTML生成（如果启用）
         html_file = None
         if self.ctx.config["STORAGE"]["FORMATS"]["HTML"]:
+            # 获取扩展数据（用于 HTML 报告）
+            from trendradar.notification.extended_renderer import get_latest_extended_data_from_storage
+            extended_data = get_latest_extended_data_from_storage(self.storage_manager)
+
+            # 添加股票名称（从配置中获取）
+            if extended_data and extended_data.get('stock'):
+                stock_config = self.ctx.config.get('STOCK', {}).get('SYMBOLS', {})
+                for symbol in extended_data['stock']:
+                    if symbol in stock_config:
+                        extended_data['stock'][symbol]['name'] = stock_config[symbol].get('name', symbol)
+
             html_file = self.ctx.generate_html(
                 stats,
                 total_titles,
@@ -332,6 +343,7 @@ class NewsAnalyzer:
                 mode=mode,
                 is_daily_summary=is_daily_summary,
                 update_info=self.update_info if self.ctx.config["SHOW_VERSION_UPDATE"] else None,
+                extended_data=extended_data,
             )
 
         return stats, html_file
@@ -377,6 +389,12 @@ class NewsAnalyzer:
 
             # 准备报告数据
             report_data = self.ctx.prepare_report(stats, failed_ids, new_titles, id_to_name, mode)
+
+            # 添加扩展数据到报告数据
+            self._add_extended_data_to_report(report_data)
+
+            # 添加 AI 分析到报告数据
+            self._add_ai_analysis_to_report(report_data, stats)
 
             # 是否发送版本更新信息
             update_info_to_send = self.update_info if cfg["SHOW_VERSION_UPDATE"] else None
@@ -577,6 +595,261 @@ class NewsAnalyzer:
 
         return results, id_to_name, failed_ids
 
+    def _crawl_extended_data(self) -> Dict:
+        """
+        爬取扩展数据源（加密货币、股票、Twitter）
+
+        Returns:
+            扩展数据字典 {
+                'crypto': {symbol: data},
+                'stock': {symbol: data},
+                'twitter': {author: [tweets]}
+            }
+        """
+        extended_data = {
+            'crypto': {},
+            'stock': {},
+            'twitter': {}
+        }
+
+        cfg = self.ctx.config
+
+        # 1. 获取加密货币数据
+        if cfg.get('CRYPTO', {}).get('ENABLE_CRYPTO', False):
+            try:
+                # 优先使用 CoinGecko（无地区限制），失败时回退到 Binance
+                use_coingecko = cfg.get('CRYPTO', {}).get('USE_COINGECKO', False)
+
+                if use_coingecko:
+                    from trendradar.crawler.crypto_fetcher_coingecko import CryptoFetcherCoinGecko
+                    fetcher_class = CryptoFetcherCoinGecko
+                    print("使用 CoinGecko API（无地区限制）")
+                else:
+                    from trendradar.crawler.crypto_fetcher import CryptoFetcher
+                    fetcher_class = CryptoFetcher
+                    print("使用 Binance API")
+
+                symbols = cfg['CRYPTO'].get('SYMBOLS', ['BTCUSDT', 'ETHUSDT'])
+                print(f"正在获取加密货币数据: {symbols}")
+
+                fetcher = fetcher_class(proxy_url=self.proxy_url if self.proxy_url else None)
+                crypto_data = fetcher.fetch_ticker_24h(symbols)
+
+                success_count = sum(1 for v in crypto_data.values() if v is not None)
+                print(f"加密货币数据获取完成: {success_count}/{len(symbols)} 成功")
+
+                extended_data['crypto'] = crypto_data
+            except Exception as e:
+                print(f"获取加密货币数据失败: {e}")
+
+        # 2. 获取股票数据
+        if cfg.get('STOCK', {}).get('ENABLE_STOCK', False):
+            try:
+                from trendradar.crawler.stock_fetcher import StockFetcher
+
+                stock_config = cfg['STOCK'].get('SYMBOLS', {})
+                if stock_config:
+                    print(f"正在获取股票数据: {list(stock_config.keys())}")
+
+                    fetcher = StockFetcher()
+                    stock_data = fetcher.fetch_stocks(stock_config)
+
+                    success_count = sum(1 for v in stock_data.values() if v is not None)
+                    print(f"股票数据获取完成: {success_count}/{len(stock_config)} 成功")
+
+                    extended_data['stock'] = stock_data
+            except Exception as e:
+                print(f"获取股票数据失败: {e}")
+
+        # 3. 获取 Twitter 数据
+        if cfg.get('TWITTER', {}).get('ENABLE_TWITTER', False):
+            try:
+                from trendradar.crawler.twitter_fetcher import TwitterFetcher
+
+                users = cfg['TWITTER'].get('USERS', [])
+                if users:
+                    print(f"正在获取 Twitter 数据: {users}")
+
+                    fetcher = TwitterFetcher()
+                    for username in users:
+                        tweets = fetcher.fetch_user_tweets(username, limit=5)
+                        if tweets:
+                            extended_data['twitter'][username] = tweets
+                            print(f"Twitter @{username}: 获取到 {len(tweets)} 条推文")
+                        else:
+                            print(f"Twitter @{username}: 未获取到推文")
+            except Exception as e:
+                print(f"获取 Twitter 数据失败: {e}")
+
+        return extended_data
+
+    def _save_extended_data(self, extended_data: Dict) -> None:
+        """
+        保存扩展数据到数据库
+
+        Args:
+            extended_data: 扩展数据字典
+        """
+        if not extended_data:
+            return
+
+        crawl_time = self.ctx.format_time()
+        crawl_date = self.ctx.format_date()
+
+        # 保存加密货币数据
+        if extended_data.get('crypto'):
+            self.storage_manager.save_crypto_prices(
+                extended_data['crypto'],
+                crawl_time,
+                crawl_date
+            )
+
+        # 保存股票数据
+        if extended_data.get('stock'):
+            self.storage_manager.save_stock_prices(
+                extended_data['stock'],
+                crawl_time,
+                crawl_date
+            )
+
+        # 保存 Twitter 数据
+        if extended_data.get('twitter'):
+            for author, tweets in extended_data['twitter'].items():
+                self.storage_manager.save_twitter_posts(
+                    tweets,
+                    author,
+                    crawl_time,
+                    crawl_date
+                )
+
+    def _run_ai_analysis(self, stats: List[Dict], extended_data: Optional[Dict] = None) -> Optional[Dict]:
+        """
+        运行 AI 综合分析
+
+        Args:
+            stats: 新闻热点统计
+            extended_data: 扩展数据（可选）
+
+        Returns:
+            AI 分析结果字典或 None
+        """
+        # 检查是否启用 AI 分析
+        ai_config = self.ctx.config.get('AI_ANALYSIS', {})
+        if not ai_config.get('ENABLE_AI_ANALYSIS', False):
+            return None
+
+        try:
+            from trendradar.ai import ClaudeAnalyzer
+
+            print("\n运行 AI 综合分析...")
+
+            # 获取配置
+            api_key = ai_config.get('API_KEY') or ai_config.get('ANTHROPIC_API_KEY')
+            model = ai_config.get('MODEL', 'claude-3-5-sonnet-20241022')
+
+            # 创建分析器
+            analyzer = ClaudeAnalyzer(api_key=api_key, model=model)
+
+            # 运行分析
+            result = analyzer.analyze_market_trends(
+                news_stats=stats,
+                extended_data=extended_data,
+                date=self.ctx.format_date()
+            )
+
+            if result:
+                # 保存分析结果
+                crawl_time = self.ctx.format_time()
+                crawl_date = self.ctx.format_date()
+
+                self.storage_manager.save_ai_analysis(
+                    analysis_content=result['analysis'],
+                    analysis_type='comprehensive',
+                    model=result['model'],
+                    tokens_used=result['tokens_used'],
+                    crawl_time=crawl_time,
+                    crawl_date=crawl_date
+                )
+
+                # 估算成本
+                cost = analyzer.estimate_cost(result['tokens_used'])
+                print(f"✅ AI 分析完成")
+                print(f"   - Tokens: {result['input_tokens']} 输入 + {result['output_tokens']} 输出 = {result['tokens_used']} 总计")
+                print(f"   - 成本: ~${cost:.4f}")
+
+                return result
+            else:
+                print("⚠️  AI 分析未生成结果")
+                return None
+
+        except ImportError:
+            print("⚠️  未安装 anthropic 库，跳过 AI 分析")
+            print("   安装命令: pip install anthropic")
+            return None
+        except ValueError as e:
+            print(f"⚠️  {e}")
+            return None
+        except Exception as e:
+            print(f"❌ AI 分析失败: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+
+    def _add_extended_data_to_report(self, report_data: Dict) -> None:
+        """
+        从数据库获取最新扩展数据并添加到报告数据中
+
+        Args:
+            report_data: 报告数据字典（会被直接修改）
+        """
+        try:
+            from trendradar.notification.extended_renderer import get_latest_extended_data_from_storage
+
+            # 从存储中获取最新扩展数据
+            extended_data = get_latest_extended_data_from_storage(self.storage_manager)
+
+            if extended_data:
+                # 添加股票名称（从配置中获取）
+                if extended_data.get('stock'):
+                    stock_config = self.ctx.config.get('STOCK', {}).get('SYMBOLS', {})
+                    for symbol in extended_data['stock']:
+                        if symbol in stock_config:
+                            extended_data['stock'][symbol]['name'] = stock_config[symbol].get('name', symbol)
+
+                report_data['extended_data'] = extended_data
+                print("扩展数据已添加到推送报告")
+            else:
+                report_data['extended_data'] = None
+
+        except Exception as e:
+            print(f"获取扩展数据失败: {e}")
+            report_data['extended_data'] = None
+
+    def _add_ai_analysis_to_report(self, report_data: Dict, stats: List[Dict]) -> None:
+        """
+        运行 AI 分析并添加到报告数据中
+
+        Args:
+            report_data: 报告数据字典（会被直接修改）
+            stats: 新闻热点统计数据
+        """
+        try:
+            # 获取扩展数据（用于AI分析）
+            extended_data = report_data.get('extended_data')
+
+            # 运行 AI 分析
+            ai_result = self._run_ai_analysis(stats, extended_data)
+
+            # 添加到报告数据
+            if ai_result:
+                report_data['ai_analysis'] = ai_result.get('analysis', '')
+            else:
+                report_data['ai_analysis'] = None
+
+        except Exception as e:
+            print(f"添加 AI 分析失败: {e}")
+            report_data['ai_analysis'] = None
+
     def _execute_mode_strategy(
         self, mode_strategy: Dict, results: Dict, id_to_name: Dict, failed_ids: List
     ) -> Optional[str]:
@@ -707,7 +980,22 @@ class NewsAnalyzer:
 
             mode_strategy = self._get_mode_strategy()
 
+            # 爬取新闻数据
             results, id_to_name, failed_ids = self._crawl_data()
+
+            # 爬取扩展数据源（加密货币、股票、Twitter）
+            print("\n" + "=" * 60)
+            print("开始爬取扩展数据源...")
+            print("=" * 60)
+            extended_data = self._crawl_extended_data()
+
+            # 保存扩展数据
+            if any(extended_data.values()):
+                print("\n保存扩展数据到数据库...")
+                self._save_extended_data(extended_data)
+                print("扩展数据保存完成")
+            else:
+                print("未启用任何扩展数据源或数据获取失败")
 
             self._execute_mode_strategy(mode_strategy, results, id_to_name, failed_ids)
 

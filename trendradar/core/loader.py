@@ -196,6 +196,36 @@ def _load_webhook_config(config_data: Dict) -> Dict:
     }
 
 
+def _load_extended_sources_config(config_data: Dict) -> Dict:
+    """加载扩展数据源配置（加密货币、股票、Twitter）"""
+    crypto_config = config_data.get("crypto", {})
+    stock_config = config_data.get("stock", {})
+    twitter_config = config_data.get("twitter", {})
+    ai_config = config_data.get("ai_analysis", {})
+
+    return {
+        "CRYPTO": {
+            "ENABLE_CRYPTO": crypto_config.get("enable_crypto", False),
+            "USE_COINGECKO": crypto_config.get("use_coingecko", False),
+            "SYMBOLS": crypto_config.get("symbols", []),
+        },
+        "STOCK": {
+            "ENABLE_STOCK": stock_config.get("enable_stock", False),
+            "SYMBOLS": stock_config.get("symbols", {}),
+        },
+        "TWITTER": {
+            "ENABLE_TWITTER": twitter_config.get("enable_twitter", False),
+            "USERS": twitter_config.get("users", []),
+        },
+        "AI_ANALYSIS": {
+            "ENABLE_AI_ANALYSIS": ai_config.get("enable_ai_analysis", False),
+            "MODEL": ai_config.get("model", "claude-3-5-sonnet-20241022"),
+            "FREQUENCY": ai_config.get("frequency", "daily"),
+            "API_KEY": _get_env_str("CLAUDE_API_KEY") or _get_env_str("ANTHROPIC_API_KEY"),
+        },
+    }
+
+
 def _print_notification_sources(config: Dict) -> None:
     """打印通知渠道配置来源信息"""
     notification_sources = []
@@ -325,6 +355,9 @@ def load_config(config_path: Optional[str] = None) -> Dict[str, Any]:
 
     # Webhook 配置
     config.update(_load_webhook_config(config_data))
+
+    # 扩展数据源配置
+    config.update(_load_extended_sources_config(config_data))
 
     # 打印通知渠道配置来源
     _print_notification_sources(config)

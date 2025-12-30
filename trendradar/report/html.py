@@ -11,6 +11,187 @@ from typing import Dict, Optional, Callable
 from trendradar.report.helpers import html_escape
 
 
+def _render_extended_data_html(extended_data: Optional[Dict]) -> str:
+    """渲染扩展数据的 HTML 内容
+
+    Args:
+        extended_data: 扩展数据字典 {
+            'crypto': {symbol: {price, change_24h, ...}},
+            'stock': {symbol: {market, price, change_pct, name, ...}},
+            'twitter': {author: [{content, ...}, ...]}
+        }
+
+    Returns:
+        扩展数据的 HTML 字符串
+    """
+    if not extended_data:
+        return ""
+
+    # 检查是否有任何数据
+    has_crypto = extended_data.get('crypto') and any(v for v in extended_data['crypto'].values())
+    has_stock = extended_data.get('stock') and any(v for v in extended_data['stock'].values())
+    has_twitter = extended_data.get('twitter') and any(v for v in extended_data['twitter'].values())
+
+    if not (has_crypto or has_stock or has_twitter):
+        return ""
+
+    html = '<div class="extended-data-section">\n'
+    html += '    <div class="extended-data-title">📊 市场数据</div>\n'
+    html += '    <div class="extended-data-content">\n'
+
+    # 1. 加密货币部分
+    if has_crypto:
+        crypto_data = extended_data['crypto']
+        # 按涨跌幅排序
+        sorted_cryptos = sorted(
+            [(symbol, data) for symbol, data in crypto_data.items() if data],
+            key=lambda x: x[1].get('change_24h', 0),
+            reverse=True
+        )
+
+        html += '        <div class="crypto-section">\n'
+        html += '            <div class="section-header">💰 加密货币</div>\n'
+        html += '            <div class="crypto-grid">\n'
+
+        for symbol, data in sorted_cryptos[:5]:  # 最多显示5个
+            display_symbol = symbol.replace('USDT', '')
+            price = data.get('price', 0)
+            change = data.get('change_24h', 0)
+
+            # 确定涨跌趋势
+            if change >= 5:
+                trend_class = "super-positive"
+                emoji = "🔥"
+            elif change > 0:
+                trend_class = "positive"
+                emoji = "📈"
+            elif change <= -5:
+                trend_class = "super-negative"
+                emoji = "💥"
+            elif change < 0:
+                trend_class = "negative"
+                emoji = "📉"
+            else:
+                trend_class = "neutral"
+                emoji = "➖"
+
+            # 格式化价格
+            if price >= 1000:
+                price_str = f"${price:,.0f}"
+            elif price >= 1:
+                price_str = f"${price:.2f}"
+            else:
+                price_str = f"${price:.4f}"
+
+            # 格式化涨跌幅
+            change_str = f"{change:+.2f}%"
+
+            html += f'                <div class="crypto-card">\n'
+            html += f'                    <div class="crypto-symbol">{emoji} {html_escape(display_symbol)}</div>\n'
+            html += f'                    <div class="crypto-price">{html_escape(price_str)}</div>\n'
+            html += f'                    <div class="crypto-change {trend_class}">{html_escape(change_str)}</div>\n'
+            html += f'                </div>\n'
+
+        html += '            </div>\n'
+        html += '        </div>\n'
+
+    # 2. 股票部分
+    if has_stock:
+        stock_data = extended_data['stock']
+        # 按涨跌幅排序
+        sorted_stocks = sorted(
+            [(symbol, data) for symbol, data in stock_data.items() if data],
+            key=lambda x: x[1].get('change_pct', 0),
+            reverse=True
+        )
+
+        html += '        <div class="stock-section">\n'
+        html += '            <div class="section-header">📈 重点股票</div>\n'
+        html += '            <div class="stock-list">\n'
+
+        for symbol, data in sorted_stocks[:5]:  # 最多显示5个
+            name = data.get('name', symbol)
+            market = data.get('market', '')
+            price = data.get('price', 0)
+            change = data.get('change_pct', 0)
+
+            # 确定涨跌趋势
+            if change >= 5:
+                trend_class = "super-positive"
+                emoji = "🔥"
+            elif change > 0:
+                trend_class = "positive"
+                emoji = "📈"
+            elif change <= -5:
+                trend_class = "super-negative"
+                emoji = "💥"
+            elif change < 0:
+                trend_class = "negative"
+                emoji = "📉"
+            else:
+                trend_class = "neutral"
+                emoji = "➖"
+
+            # 格式化价格
+            price_str = f"${price:.2f}" if market == "US" else f"{price:.2f}"
+
+            # 格式化涨跌幅
+            change_str = f"{change:+.2f}%"
+
+            # 构建显示名称
+            if market:
+                display_name = f"{name} ({market})"
+            else:
+                display_name = name
+
+            html += f'                <div class="stock-item">\n'
+            html += f'                    <div class="stock-info">\n'
+            html += f'                        <div class="stock-name">{emoji} {html_escape(display_name)}</div>\n'
+            html += f'                        <div class="stock-price">{html_escape(price_str)}</div>\n'
+            html += f'                    </div>\n'
+            html += f'                    <div class="stock-change {trend_class}">{html_escape(change_str)}</div>\n'
+            html += f'                </div>\n'
+
+        html += '            </div>\n'
+        html += '        </div>\n'
+
+    # 3. Twitter 部分
+    if has_twitter:
+        twitter_data = extended_data['twitter']
+
+        html += '        <div class="twitter-section">\n'
+        html += '            <div class="section-header">🐦 Twitter 动态</div>\n'
+        html += '            <div class="twitter-list">\n'
+
+        for author, tweets in twitter_data.items():
+            if not tweets:
+                continue
+
+            # 只显示最新推文
+            latest_tweet = tweets[0] if isinstance(tweets, list) else tweets
+
+            # 截取推文内容
+            tweet_content = latest_tweet.get('content', '')
+            if len(tweet_content) > 120:
+                tweet_content = tweet_content[:117] + "..."
+
+            # 清理内容
+            tweet_content = tweet_content.replace('\n', ' ').strip()
+
+            html += f'                <div class="tweet-item">\n'
+            html += f'                    <div class="tweet-author">@{html_escape(author)}</div>\n'
+            html += f'                    <div class="tweet-content">{html_escape(tweet_content)}</div>\n'
+            html += f'                </div>\n'
+
+        html += '            </div>\n'
+        html += '        </div>\n'
+
+    html += '    </div>\n'
+    html += '</div>\n'
+
+    return html
+
+
 def render_html_content(
     report_data: Dict,
     total_titles: int,
@@ -440,6 +621,258 @@ def render_html_content(
                 color: #374151;
             }
 
+            /* 扩展数据样式 */
+            .extended-data-section {
+                background: linear-gradient(135deg, #f0f9ff 0%, #f5f3ff 100%);
+                padding: 24px;
+                margin: 0;
+                border-bottom: 1px solid #e5e7eb;
+            }
+
+            .extended-data-title {
+                font-size: 18px;
+                font-weight: 700;
+                color: #1a1a1a;
+                text-align: center;
+                margin: 0 0 20px 0;
+            }
+
+            .extended-data-content {
+                display: grid;
+                gap: 20px;
+            }
+
+            .section-header {
+                font-size: 14px;
+                font-weight: 600;
+                color: #374151;
+                margin-bottom: 12px;
+            }
+
+            /* 加密货币样式 */
+            .crypto-section {
+                background: white;
+                border-radius: 12px;
+                padding: 16px;
+                box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+            }
+
+            .crypto-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+                gap: 12px;
+            }
+
+            .crypto-card {
+                background: linear-gradient(135deg, #fafafa 0%, #f5f5f5 100%);
+                border-radius: 8px;
+                padding: 12px;
+                text-align: center;
+                transition: transform 0.2s ease, box-shadow 0.2s ease;
+                border: 1px solid #f0f0f0;
+            }
+
+            .crypto-card:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            }
+
+            .crypto-symbol {
+                font-size: 14px;
+                font-weight: 600;
+                color: #374151;
+                margin-bottom: 8px;
+            }
+
+            .crypto-price {
+                font-size: 16px;
+                font-weight: 700;
+                color: #1a1a1a;
+                margin-bottom: 4px;
+            }
+
+            .crypto-change {
+                font-size: 13px;
+                font-weight: 600;
+                padding: 3px 8px;
+                border-radius: 12px;
+                display: inline-block;
+            }
+
+            .crypto-change.positive {
+                color: #059669;
+                background: #d1fae5;
+            }
+
+            .crypto-change.super-positive {
+                color: #dc2626;
+                background: #fee2e2;
+            }
+
+            .crypto-change.negative {
+                color: #dc2626;
+                background: #fee2e2;
+            }
+
+            .crypto-change.super-negative {
+                color: #7c2d12;
+                background: #fef2f2;
+            }
+
+            .crypto-change.neutral {
+                color: #6b7280;
+                background: #f3f4f6;
+            }
+
+            /* 股票样式 */
+            .stock-section {
+                background: white;
+                border-radius: 12px;
+                padding: 16px;
+                box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+            }
+
+            .stock-list {
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
+            }
+
+            .stock-item {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding: 10px 12px;
+                background: #fafafa;
+                border-radius: 8px;
+                border: 1px solid #f0f0f0;
+                transition: background 0.2s ease;
+            }
+
+            .stock-item:hover {
+                background: #f5f5f5;
+            }
+
+            .stock-info {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                flex: 1;
+                gap: 12px;
+            }
+
+            .stock-name {
+                font-size: 13px;
+                font-weight: 600;
+                color: #374151;
+            }
+
+            .stock-price {
+                font-size: 14px;
+                font-weight: 700;
+                color: #1a1a1a;
+            }
+
+            .stock-change {
+                font-size: 13px;
+                font-weight: 600;
+                padding: 3px 8px;
+                border-radius: 12px;
+                min-width: 65px;
+                text-align: center;
+            }
+
+            .stock-change.positive {
+                color: #059669;
+                background: #d1fae5;
+            }
+
+            .stock-change.super-positive {
+                color: #dc2626;
+                background: #fee2e2;
+            }
+
+            .stock-change.negative {
+                color: #dc2626;
+                background: #fee2e2;
+            }
+
+            .stock-change.super-negative {
+                color: #7c2d12;
+                background: #fef2f2;
+            }
+
+            .stock-change.neutral {
+                color: #6b7280;
+                background: #f3f4f6;
+            }
+
+            /* Twitter 样式 */
+            .twitter-section {
+                background: white;
+                border-radius: 12px;
+                padding: 16px;
+                box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+            }
+
+            .twitter-list {
+                display: flex;
+                flex-direction: column;
+                gap: 12px;
+            }
+
+            .tweet-item {
+                padding: 12px;
+                background: #fafafa;
+                border-radius: 8px;
+                border-left: 3px solid #1d9bf0;
+                transition: background 0.2s ease;
+            }
+
+            .tweet-item:hover {
+                background: #f5f5f5;
+            }
+
+            .tweet-author {
+                font-size: 13px;
+                font-weight: 600;
+                color: #1d9bf0;
+                margin-bottom: 6px;
+            }
+
+            .tweet-content {
+                font-size: 13px;
+                line-height: 1.5;
+                color: #374151;
+            }
+
+            /* AI 分析样式 */
+            .ai-analysis-section {
+                background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+                padding: 24px;
+                margin: 0;
+                border-bottom: 1px solid #e5e7eb;
+            }
+
+            .ai-analysis-title {
+                font-size: 18px;
+                font-weight: 700;
+                color: #1a1a1a;
+                text-align: center;
+                margin: 0 0 20px 0;
+            }
+
+            .ai-analysis-content {
+                background: white;
+                border-radius: 12px;
+                padding: 20px;
+                box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+                font-size: 14px;
+                line-height: 1.8;
+                color: #374151;
+                white-space: pre-wrap;
+            }
+
             @media (max-width: 480px) {
                 body { padding: 12px; }
                 .header { padding: 24px 20px; }
@@ -462,6 +895,31 @@ def render_html_content(
                 }
                 .save-btn {
                     width: 100%;
+                }
+
+                /* 扩展数据移动端样式 */
+                .extended-data-section {
+                    padding: 20px 16px;
+                }
+                .crypto-grid {
+                    grid-template-columns: repeat(2, 1fr);
+                }
+                .stock-info {
+                    flex-direction: column;
+                    align-items: flex-start;
+                    gap: 4px;
+                }
+                .stock-change {
+                    min-width: auto;
+                }
+
+                /* AI 分析移动端样式 */
+                .ai-analysis-section {
+                    padding: 20px 16px;
+                }
+                .ai-analysis-content {
+                    padding: 16px;
+                    font-size: 13px;
                 }
             }
         </style>
@@ -526,7 +984,26 @@ def render_html_content(
                     </div>
                 </div>
             </div>
+"""
 
+    # 添加扩展数据区块（如果有）
+    extended_data_html = _render_extended_data_html(report_data.get('extended_data'))
+    if extended_data_html:
+        html += extended_data_html
+
+    # 添加 AI 分析区块（如果有）
+    ai_analysis = report_data.get('ai_analysis')
+    if ai_analysis:
+        html += """
+            <div class="ai-analysis-section">
+                <div class="ai-analysis-title">🤖 AI 市场分析</div>
+                <div class="ai-analysis-content">"""
+        html += html_escape(ai_analysis).replace('\n', '<br>')
+        html += """
+                </div>
+            </div>"""
+
+    html += """
             <div class="content">"""
 
     # 处理失败ID错误信息

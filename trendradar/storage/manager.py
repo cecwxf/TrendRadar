@@ -225,6 +225,36 @@ class StorageManager:
         """检查是否是当天第一次抓取"""
         return self.get_backend().is_first_crawl_today(date)
 
+    # === 扩展数据存储方法 ===
+
+    def save_crypto_prices(self, crypto_data: dict, crawl_time: str, crawl_date: str) -> bool:
+        """保存加密货币价格数据"""
+        return self.get_backend().save_crypto_prices(crypto_data, crawl_time, crawl_date)
+
+    def save_stock_prices(self, stock_data: dict, crawl_time: str, crawl_date: str) -> bool:
+        """保存股票价格数据"""
+        return self.get_backend().save_stock_prices(stock_data, crawl_time, crawl_date)
+
+    def save_twitter_posts(self, tweets: list, author: str, crawl_time: str, crawl_date: str) -> bool:
+        """保存 Twitter 推文数据"""
+        return self.get_backend().save_twitter_posts(tweets, author, crawl_time, crawl_date)
+
+    def save_ai_analysis(
+        self,
+        analysis_content: str,
+        analysis_type: str,
+        model: str,
+        tokens_used: int,
+        crawl_time: str,
+        crawl_date: str,
+        data_snapshot: Optional[str] = None
+    ) -> bool:
+        """保存 AI 分析结果"""
+        return self.get_backend().save_ai_analysis(
+            analysis_content, analysis_type, model, tokens_used,
+            crawl_time, crawl_date, data_snapshot
+        )
+
     def cleanup(self) -> None:
         """清理资源"""
         if self._backend:

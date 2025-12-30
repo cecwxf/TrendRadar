@@ -146,6 +146,7 @@ def generate_html_report(
     mode: str = "daily",
     is_daily_summary: bool = False,
     update_info: Optional[Dict] = None,
+    extended_data: Optional[Dict] = None,
     rank_threshold: int = 3,
     output_dir: str = "output",
     date_folder: str = "",
@@ -167,6 +168,7 @@ def generate_html_report(
         mode: 报告模式 (daily/incremental/current)
         is_daily_summary: 是否是每日汇总
         update_info: 更新信息
+        extended_data: 扩展数据（加密货币、股票、Twitter）
         rank_threshold: 排名阈值
         output_dir: 输出目录
         date_folder: 日期文件夹名称
@@ -205,6 +207,10 @@ def generate_html_report(
         matches_word_groups_func,
         load_frequency_words_func,
     )
+
+    # 添加扩展数据
+    if extended_data:
+        report_data['extended_data'] = extended_data
 
     # 渲染 HTML 内容
     if render_html_func:

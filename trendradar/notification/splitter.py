@@ -67,22 +67,44 @@ def split_content_into_batches(
     )
     now = get_time_func() if get_time_func else datetime.now()
 
+    # 添加扩展数据部分（如果有）
+    extended_section = ""
+    if report_data.get('extended_data'):
+        from trendradar.notification.extended_renderer import render_extended_data_section
+        extended_section = render_extended_data_section(
+            report_data['extended_data'],
+            format_type=format_type
+        )
+
     base_header = ""
     if format_type in ("wework", "bark"):
-        base_header = f"**总新闻数：** {total_titles}\n\n\n\n"
+        base_header = f"**总新闻数：** {total_titles}\n\n"
+        if extended_section:
+            base_header += f"\n{extended_section}"
+        base_header += "\n"
     elif format_type == "telegram":
         base_header = f"总新闻数： {total_titles}\n\n"
+        if extended_section:
+            base_header += f"\n{extended_section}"
     elif format_type == "ntfy":
         base_header = f"**总新闻数：** {total_titles}\n\n"
+        if extended_section:
+            base_header += f"\n{extended_section}"
     elif format_type == "feishu":
         base_header = ""
+        if extended_section:
+            base_header = extended_section
     elif format_type == "dingtalk":
         base_header = f"**总新闻数：** {total_titles}\n\n"
         base_header += f"**时间：** {now.strftime('%Y-%m-%d %H:%M:%S')}\n\n"
         base_header += f"**类型：** 热点分析报告\n\n"
         base_header += "---\n\n"
+        if extended_section:
+            base_header += f"{extended_section}"
     elif format_type == "slack":
         base_header = f"*总新闻数：* {total_titles}\n\n"
+        if extended_section:
+            base_header += f"\n{extended_section}"
 
     base_footer = ""
     if format_type in ("wework", "bark"):

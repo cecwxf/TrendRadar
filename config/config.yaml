@@ -21,7 +21,7 @@ storage:
   formats:
     sqlite: true       # 主存储（必须启用）
     txt: false         # 是否生成 TXT 快照
-    html: false        # 是否生成 HTML 报告（⚠️ 邮件推送必须设为 true，否则会报错）
+    html: true         # 是否生成 HTML 报告（⚠️ 邮件推送必须设为 true，否则会报错）
 
   # 本地存储配置
   local:
@@ -53,8 +53,8 @@ storage:
 crawler:
   request_interval: 1000 # 请求间隔(毫秒)
   enable_crawler: true # 是否启用爬取新闻功能，如果 false，则直接停止程序
-  use_proxy: false # 是否启用代理，false 时为关闭
-  default_proxy: "http://127.0.0.1:10801"
+  use_proxy: true # 是否启用代理，false 时为关闭
+  default_proxy: "http://127.0.0.1:7000"
 
 # 🔸 daily（当日汇总模式）
 #   • 推送时机：按时推送(默认每小时推送一次)
@@ -184,3 +184,62 @@ platforms:
     name: "抖音"
   - id: "zhihu"
     name: "知乎"
+
+# ============================================
+# 扩展数据源配置
+# ============================================
+
+# 加密货币配置
+crypto:
+  enable_crypto: true              # 是否启用加密货币数据获取
+  use_coingecko: true              # 使用 CoinGecko API（无地区限制，true=CoinGecko, false=Binance）
+  symbols:
+    - BTCUSDT                      # 比特币
+    - ETHUSDT                      # 以太坊
+    - BNBUSDT                      # 币安币
+    # 可添加更多币种，如：
+    # - SOLUSDT                    # Solana
+
+# 股票配置
+stock:
+  enable_stock: true               # 是否启用股票数据获取
+  symbols:
+    # 美股科技巨头
+    AAPL:
+      market: "US"
+      name: "苹果"
+    TSLA:
+      market: "US"
+      name: "特斯拉"
+    NVDA:
+      market: "US"
+      name: "英伟达"
+
+    # 港股
+    "0700.HK":
+      market: "HK"
+      name: "腾讯控股"
+    "9988.HK":
+      market: "HK"
+      name: "阿里巴巴"
+
+    # A股（上证指数）
+    "000001.SS":
+      market: "CN"
+      name: "上证指数"
+
+# Twitter 配置
+twitter:
+  enable_twitter: true             # 是否启用 Twitter 数据获取
+  users:
+    - "chuanwang"                  # 硅谷王川（Silicon Valley 王川）
+    # 可添加更多用户，如：
+    # - "elonmusk"                 # Elon Musk
+    # - "sama"                     # Sam Altman
+
+# AI 分析配置
+ai_analysis:
+  enable_ai_analysis: false        # 是否启用 AI 分析（默认关闭以节省成本）
+  model: "claude-3-5-sonnet-20241022"  # AI 模型
+  frequency: "daily"               # 分析频率: hourly（每小时）, daily（每日）, disabled（禁用）
+  # API Key 通过环境变量 CLAUDE_API_KEY 配置，不要直接写在此处

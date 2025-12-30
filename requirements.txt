@@ -4,3 +4,8 @@ PyYAML>=6.0.3,<7.0.0
 fastmcp>=2.12.0,<2.14.0
 websockets>=13.0,<14.0
 boto3>=1.35.0,<2.0.0
+
+# 扩展数据源依赖
+yfinance>=0.2.49,<0.3.0         # Yahoo Finance 股票数据
+feedparser>=6.0.0,<7.0.0        # RSS 解析（Twitter）
+anthropic>=0.42.0,<1.0.0        # Claude AI SDK（可选，用于 AI 分析）
