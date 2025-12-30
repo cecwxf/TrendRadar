@@ -44,8 +44,10 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: read
+  contents: write  # 改为 write 以支持 GitHub Pages 部署
   actions: write
+  pages: write
+  id-token: write
 
 jobs:
   crawl:
@@ -162,3 +164,20 @@ jobs:
           CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
           GITHUB_ACTIONS: true
         run: python -m trendradar
+
+      - name: Generate index page
+        if: success()
+        run: python scripts/generate_index.py
+
+      - name: Deploy to GitHub Pages
+        if: success()
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./output
+          publish_branch: gh-pages
+          keep_files: false
+          enable_jekyll: false
+          user_name: 'github-actions[bot]'
+          user_email: 'github-actions[bot]@users.noreply.github.com'
+          commit_message: 'Deploy report: ${{ github.event.head_commit.message }}'
