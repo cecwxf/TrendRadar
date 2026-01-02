@@ -201,6 +201,7 @@ def render_html_content(
     *,
     reverse_content_order: bool = False,
     get_time_func: Optional[Callable[[], datetime]] = None,
+    chart_data_json: Optional[str] = None,
 ) -> str:
     """渲染HTML内容
 
@@ -212,6 +213,7 @@ def render_html_content(
         update_info: 更新信息（可选）
         reverse_content_order: 是否反转内容顺序（新增热点在前）
         get_time_func: 获取当前时间的函数（可选，默认使用 datetime.now）
+        chart_data_json: 图表数据JSON字符串（可选）
 
     Returns:
         渲染后的 HTML 字符串
@@ -224,6 +226,7 @@ def render_html_content(
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>热点新闻分析</title>
         <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" integrity="sha512-BNaRQnYJYiPSqHHDb58B0yaPfCu+Wgds8Gp/gU33kqBtgNS4tSPHuGibyoeqMV/TJlSKda6FXzoEyYGjTe+vXA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+        <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
         <style>
             * { box-sizing: border-box; }
             body {
@@ -621,6 +624,38 @@ def render_html_content(
                 color: #374151;
             }
 
+            /* 图表样式 */
+            .chart-section {
+                background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+                padding: 24px;
+                margin: 0;
+                border-bottom: 1px solid #e5e7eb;
+            }
+
+            .chart-container {
+                background: white;
+                border-radius: 12px;
+                padding: 20px;
+                margin-bottom: 20px;
+                box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+            }
+
+            .chart-container:last-child {
+                margin-bottom: 0;
+            }
+
+            .chart-title {
+                font-size: 16px;
+                font-weight: 600;
+                color: #374151;
+                margin-bottom: 16px;
+                text-align: center;
+            }
+
+            canvas {
+                max-height: 300px;
+            }
+
             /* 扩展数据样式 */
             .extended-data-section {
                 background: linear-gradient(135deg, #f0f9ff 0%, #f5f3ff 100%);
@@ -897,6 +932,17 @@ def render_html_content(
                     width: 100%;
                 }
 
+                /* 图表移动端样式 */
+                .chart-section {
+                    padding: 20px 16px;
+                }
+                .chart-container {
+                    padding: 16px;
+                }
+                canvas {
+                    max-height: 200px !important;
+                }
+
                 /* 扩展数据移动端样式 */
                 .extended-data-section {
                     padding: 20px 16px;
@@ -982,6 +1028,27 @@ def render_html_content(
 
     html += """</span>
                     </div>
+                </div>
+            </div>
+"""
+
+    # 添加图表区块（如果有图表数据）
+    if chart_data_json:
+        html += """
+            <div class="chart-section" id="trend-charts">
+                <div class="chart-container">
+                    <h3 class="chart-title">📊 24小时热点新闻趋势</h3>
+                    <canvas id="newsTrendChart" height="250"></canvas>
+                </div>
+
+                <div class="chart-container">
+                    <h3 class="chart-title">💰 加密货币价格走势 (7天)</h3>
+                    <canvas id="cryptoTrendChart" height="250"></canvas>
+                </div>
+
+                <div class="chart-container">
+                    <h3 class="chart-title">📈 股票价格走势 (7天)</h3>
+                    <canvas id="stockTrendChart" height="250"></canvas>
                 </div>
             </div>
 """
@@ -1516,8 +1583,238 @@ def render_html_content(
                 }
             }
 
+            // 图表渲染代码
+            """ + (f"""
+            const chartData = {chart_data_json};
+
+            // 渲染新闻趋势图
+            function renderNewsTrendChart(data) {{
+                if (!data || !data.labels || data.labels.length === 0) return;
+                const ctx = document.getElementById('newsTrendChart');
+                if (!ctx) return;
+
+                new Chart(ctx, {{
+                    type: 'line',
+                    data: {{
+                        labels: data.labels,
+                        datasets: [{{
+                            label: '热点新闻数量',
+                            data: data.values,
+                            borderColor: '#7c3aed',
+                            backgroundColor: 'rgba(124, 58, 237, 0.1)',
+                            borderWidth: 2,
+                            tension: 0.3,
+                            fill: true,
+                            pointRadius: 4,
+                            pointHoverRadius: 6
+                        }}]
+                    }},
+                    options: {{
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {{
+                            legend: {{ display: false }},
+                            title: {{
+                                display: false
+                            }},
+                            tooltip: {{
+                                backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                                padding: 12,
+                                titleFont: {{ size: 13 }},
+                                bodyFont: {{ size: 12 }},
+                                callbacks: {{
+                                    label: function(context) {{
+                                        return '新闻数量: ' + context.parsed.y + ' 条';
+                                    }}
+                                }}
+                            }}
+                        }},
+                        scales: {{
+                            y: {{
+                                beginAtZero: true,
+                                ticks: {{
+                                    color: '#666',
+                                    stepSize: 10
+                                }},
+                                grid: {{ color: '#f0f0f0' }}
+                            }},
+                            x: {{
+                                ticks: {{ color: '#666' }},
+                                grid: {{ display: false }}
+                            }}
+                        }}
+                    }}
+                }});
+            }}
+
+            // 渲染加密货币图表
+            function renderCryptoChart(data) {{
+                if (!data || !data.labels || data.labels.length === 0) return;
+                const ctx = document.getElementById('cryptoTrendChart');
+                if (!ctx) return;
+
+                const colors = {{
+                    'BTC': {{ border: '#f7931a', bg: 'rgba(247, 147, 26, 0.1)' }},
+                    'ETH': {{ border: '#627eea', bg: 'rgba(98, 126, 234, 0.1)' }},
+                    'BNB': {{ border: '#f3ba2f', bg: 'rgba(243, 186, 47, 0.1)' }}
+                }};
+
+                const datasets = Object.keys(data.datasets).map(symbol => ({{
+                    label: symbol,
+                    data: data.datasets[symbol],
+                    borderColor: colors[symbol]?.border || '#999',
+                    backgroundColor: colors[symbol]?.bg || 'rgba(153, 153, 153, 0.1)',
+                    borderWidth: 2,
+                    tension: 0.3,
+                    fill: false,
+                    pointRadius: 0,
+                    pointHoverRadius: 4
+                }}));
+
+                new Chart(ctx, {{
+                    type: 'line',
+                    data: {{
+                        labels: data.labels,
+                        datasets: datasets
+                    }},
+                    options: {{
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        interaction: {{
+                            mode: 'index',
+                            intersect: false
+                        }},
+                        plugins: {{
+                            legend: {{
+                                position: 'top',
+                                labels: {{
+                                    color: '#374151',
+                                    usePointStyle: true,
+                                    padding: 15
+                                }}
+                            }},
+                            title: {{
+                                display: false
+                            }},
+                            tooltip: {{
+                                backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                                padding: 12,
+                                callbacks: {{
+                                    label: function(context) {{
+                                        return context.dataset.label + ': $' + context.parsed.y.toLocaleString();
+                                    }}
+                                }}
+                            }}
+                        }},
+                        scales: {{
+                            y: {{
+                                ticks: {{
+                                    color: '#666',
+                                    callback: function(value) {{
+                                        return '$' + value.toLocaleString();
+                                    }}
+                                }},
+                                grid: {{ color: '#f0f0f0' }}
+                            }},
+                            x: {{
+                                ticks: {{
+                                    color: '#666',
+                                    maxTicksLimit: 12
+                                }},
+                                grid: {{ display: false }}
+                            }}
+                        }}
+                    }}
+                }});
+            }}
+
+            // 渲染股票图表
+            function renderStockChart(data) {{
+                if (!data || !data.labels || data.labels.length === 0) return;
+                const ctx = document.getElementById('stockTrendChart');
+                if (!ctx) return;
+
+                const stockColors = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
+                const datasets = Object.keys(data.datasets).map((symbol, index) => ({{
+                    label: symbol,
+                    data: data.datasets[symbol],
+                    borderColor: stockColors[index % stockColors.length],
+                    borderWidth: 2,
+                    tension: 0.3,
+                    fill: false,
+                    pointRadius: 0,
+                    pointHoverRadius: 4
+                }}));
+
+                new Chart(ctx, {{
+                    type: 'line',
+                    data: {{
+                        labels: data.labels,
+                        datasets: datasets
+                    }},
+                    options: {{
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        interaction: {{
+                            mode: 'index',
+                            intersect: false
+                        }},
+                        plugins: {{
+                            legend: {{
+                                position: 'top',
+                                labels: {{
+                                    color: '#374151',
+                                    usePointStyle: true,
+                                    padding: 15
+                                }}
+                            }},
+                            title: {{
+                                display: false
+                            }},
+                            tooltip: {{
+                                backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                                padding: 12,
+                                callbacks: {{
+                                    label: function(context) {{
+                                        return context.dataset.label + ': $' + context.parsed.y.toFixed(2);
+                                    }}
+                                }}
+                            }}
+                        }},
+                        scales: {{
+                            y: {{
+                                ticks: {{
+                                    color: '#666',
+                                    callback: function(value) {{
+                                        return '$' + value.toFixed(2);
+                                    }}
+                                }},
+                                grid: {{ color: '#f0f0f0' }}
+                            }},
+                            x: {{
+                                ticks: {{
+                                    color: '#666',
+                                    maxTicksLimit: 12
+                                }},
+                                grid: {{ display: false }}
+                            }}
+                        }}
+                    }}
+                }});
+            }}
+            """ if chart_data_json else "") + """
+
             document.addEventListener('DOMContentLoaded', function() {
                 window.scrollTo(0, 0);
+
+                // 渲染图表
+                """ + ("""
+                if (typeof chartData !== 'undefined' && typeof Chart !== 'undefined') {
+                    renderNewsTrendChart(chartData.news_trend);
+                    renderCryptoChart(chartData.crypto_trend);
+                    renderStockChart(chartData.stock_trend);
+                }
+                """ if chart_data_json else "") + """
             });
         </script>
     </body>

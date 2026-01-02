@@ -26,14 +26,14 @@ storage:
   # 本地存储配置
   local:
     data_dir: "output"        # 数据目录
-    retention_days: 0         # 本地数据保留天数（0 = 不清理）
+    retention_days: 1         # 本地数据保留天数（1 = 只保留最近1天，节省空间）
 
   # 远程存储配置（S3 兼容协议）
   # 支持: Cloudflare R2, 阿里云 OSS, 腾讯云 COS, AWS S3, MinIO 等
   # 建议将敏感信息配置在 GitHub Secrets 或环境变量中
   remote:
-    # 数据保留天数（0 = 不清理远程数据）
-    retention_days: 0
+    # 数据保留天数（30 = 保留30天历史数据）
+    retention_days: 30
     # S3 兼容配置
     endpoint_url: ""          # 服务端点（或环境变量 S3_ENDPOINT_URL）
                               # Cloudflare R2: https://<account_id>.r2.cloudflarestorage.com
@@ -45,10 +45,10 @@ storage:
     region: ""                # 区域（可选，部分服务商需要，或环境变量 S3_REGION）
 
   # 数据拉取配置（从远程同步到本地）
-  # 用于 MCP Server 等场景：爬虫存到远程，MCP 拉取到本地分析
+  # 用于数据可视化和MCP Server等场景：爬虫存到远程，启动时拉取到本地用于图表生成
   pull:
-    enabled: false            # 是否启用启动时自动拉取
-    days: 7                   # 拉取最近 N 天的数据（0 = 不拉取）
+    enabled: true             # 启用启动时自动拉取历史数据（用于生成趋势图表）
+    days: 7                   # 拉取最近 7 天的数据（用于7天趋势图表）
 
 crawler:
   request_interval: 1000 # 请求间隔(毫秒)

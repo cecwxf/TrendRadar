@@ -100,6 +100,17 @@ jobs:
             exit 1
           fi
 
+      - name: Verify S3 Configuration
+        if: success()
+        run: |
+          if [ -z "${{ secrets.S3_BUCKET_NAME }}" ]; then
+            echo "⚠️  Warning: S3_BUCKET_NAME not configured"
+            echo "Charts may have limited data (no history)"
+          else
+            echo "✅ S3 storage configured"
+            echo "Bucket: ${{ secrets.S3_BUCKET_NAME }}"
+          fi
+
       - name: Run crawler
         if: success()
         env:
@@ -134,6 +145,29 @@ jobs:
       - name: Generate index page
         if: success()
         run: python scripts/generate_index.py
+
+      - name: Verify Charts Integration
+        if: success()
+        run: |
+          echo "🔍 Verifying chart integration..."
+
+          # 检查Chart.js是否存在
+          if grep -q "Chart.js" output/index.html 2>/dev/null || grep -q "chart.umd.min.js" output/index.html 2>/dev/null; then
+            echo "✅ Chart.js integration detected"
+          else
+            echo "⚠️  Warning: Chart.js not found in HTML"
+          fi
+
+          # 检查图表数据
+          if grep -q "chartData" output/index.html 2>/dev/null; then
+            echo "✅ Chart data embedded"
+          else
+            echo "ℹ️  Info: Chart data not found (may not have historical data yet)"
+          fi
+
+          # 统计报告文件
+          report_count=$(find output -name "*.html" 2>/dev/null | wc -l)
+          echo "📊 Generated $report_count HTML files"
 
       - name: Deploy to GitHub Pages
         if: success()

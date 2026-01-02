@@ -155,6 +155,8 @@ def generate_html_report(
     matches_word_groups_func: Optional[Callable] = None,
     load_frequency_words_func: Optional[Callable] = None,
     enable_index_copy: bool = True,
+    storage_manager=None,
+    crawl_date: Optional[str] = None,
 ) -> str:
     """
     生成 HTML 报告
@@ -212,10 +214,34 @@ def generate_html_report(
     if extended_data:
         report_data['extended_data'] = extended_data
 
+    # 生成图表数据
+    chart_data_json = None
+    if storage_manager and crawl_date:
+        try:
+            from trendradar.report.chart_data import generate_chart_data
+            from datetime import datetime
+            import json
+
+            chart_data = generate_chart_data(storage_manager, crawl_date)
+            chart_data_json = json.dumps(chart_data, ensure_ascii=False)
+        except Exception as e:
+            print(f"Warning: Chart data generation failed: {e}")
+            # 生成空图表数据结构
+            import json
+            from datetime import datetime
+            chart_data = {
+                'news_trend': {'labels': [], 'values': []},
+                'crypto_trend': {'labels': [], 'datasets': {}},
+                'stock_trend': {'labels': [], 'datasets': {}},
+                'generated_at': datetime.now().isoformat()
+            }
+            chart_data_json = json.dumps(chart_data, ensure_ascii=False)
+
     # 渲染 HTML 内容
     if render_html_func:
         html_content = render_html_func(
-            report_data, total_titles, is_daily_summary, mode, update_info
+            report_data, total_titles, is_daily_summary, mode, update_info,
+            chart_data_json=chart_data_json
         )
     else:
         # 默认简单 HTML
